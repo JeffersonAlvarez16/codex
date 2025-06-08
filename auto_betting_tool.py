@@ -4,6 +4,18 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from xgboost import XGBClassifier
 
+# Common competitions to search if the user does not specify one.
+DEFAULT_COMPETITIONS = [
+    "worldcup",
+    "en.1",
+    "es.1",
+    "de.1",
+    "it.1",
+    "fr.1",
+    "pt.1",
+    "nl.1",
+]
+
 SEASON_URL = (
     "https://raw.githubusercontent.com/openfootball/football.json/master/{season}/{competition}.json"
 )
@@ -40,6 +52,21 @@ def load_historical_data(
     df = pd.concat(dfs, ignore_index=True)
     df.sort_values("date", inplace=True)
     return df
+
+
+def guess_competition(
+    home: str, away: str, match_date: pd.Timestamp, seasons_back: int = 2
+) -> str | None:
+    """Return a competition code containing both teams if found."""
+    for comp in DEFAULT_COMPETITIONS:
+        try:
+            df = load_historical_data(match_date, comp, seasons_back)
+        except requests.HTTPError:
+            continue
+        teams = set(df["home_team"]).union(df["away_team"])
+        if home in teams and away in teams:
+            return comp
+    return None
 
 def preprocess(df: pd.DataFrame, window: int = 5):
     df = df.copy()
@@ -115,8 +142,22 @@ def make_features(info: dict, df: pd.DataFrame, window: int, encoders, scaler, f
     feat_df[feature_cols] = scaler.transform(feat_df[feature_cols])
     return feat_df[feature_cols]
 
-def predict(home: str, away: str, date: str, competition: str, window: int = 5):
+def predict(
+    home: str,
+    away: str,
+    date: str,
+    competition: str | None = None,
+    window: int = 5,
+) -> tuple[dict, dict]:
     mdate = pd.to_datetime(date)
+    if competition is None:
+        competition = guess_competition(home, away, mdate)
+        if not competition:
+            raise ValueError(
+                "Teams {} and {} not found in default competitions. "
+                "Specify --competition explicitly.".format(home, away)
+            )
+        print(f"Using competition {competition}")
     hist = load_historical_data(mdate, competition)
     prep, encoders, scaler, feat_cols = preprocess(hist, window)
     models, feats = train_models(prep)
@@ -134,8 +175,8 @@ if __name__ == '__main__':
     parser.add_argument('date', help='Match date YYYY-MM-DD')
     parser.add_argument(
         '--competition',
-        default='en.1',
-        help='Openfootball competition code (e.g. en.1 for Premier League)',
+        default=None,
+        help='Openfootball competition code. If omitted, try to auto-detect.',
     )
     parser.add_argument('--window', type=int, default=5, help='Rolling window')
     args = parser.parse_args()
