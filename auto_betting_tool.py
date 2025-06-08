@@ -74,6 +74,11 @@ def train_models(df: pd.DataFrame):
     return models, feats
 
 def make_features(info: dict, df: pd.DataFrame, window: int, encoders, scaler, feature_cols):
+    for team in [info["home_team"], info["away_team"]]:
+        if team not in encoders["home_team"].classes_:
+            raise ValueError(
+                f"Team '{team}' not found in historical data. Only Premier League teams are supported."
+            )
     temp = df[df["date"] < info["date"]].copy()
     for team_col, gf_col, ga_col in [("home_team", "home_goals", "away_goals"), ("away_team", "away_goals", "home_goals")]:
         temp[f"{team_col}_gf_avg"] = temp.groupby(team_col)[gf_col].shift().rolling(window).mean()

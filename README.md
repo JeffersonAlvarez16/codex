@@ -43,7 +43,8 @@ python sports_betting_tool.py historical_data.csv upcoming_matches.csv --window 
 The script outputs a CSV file with predicted probabilities and suggested value bets for each match.
 
 ## Automatic Training Example
-The script `auto_betting_tool.py` can download Premier League data automatically. Provide only the teams and the match date:
+The script `auto_betting_tool.py` downloads recent seasons from the English Premier League.
+You must use Premier League team names when running it. Provide only the teams and the match date:
 
 ```bash
 python auto_betting_tool.py "Manchester United" "Chelsea" 2021-05-01
