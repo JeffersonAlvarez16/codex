@@ -46,10 +46,18 @@ The script outputs a CSV file with predicted probabilities and suggested value b
 The script `auto_betting_tool.py` downloads recent seasons from the
 [openfootball](https://github.com/openfootball/football.json) dataset.
 Specify the competition code with `--competition` (e.g. `en.1` for the Premier
-League, `es.1` for La Liga). Team names must match the dataset. Example:
+League, `es.1` for La Liga). Team names **must** be written exactly as in the
+dataset (usually in English). If you request international matches, use the
+appropriate competition code like `worldcup`. Example:
 
 ```bash
 python auto_betting_tool.py "Manchester United" "Chelsea" 2021-05-01 --competition en.1
+```
+
+For international matches:
+
+```bash
+python auto_betting_tool.py "Germany" "France" 2018-06-15 --competition worldcup
 ```
 
 The tool fetches recent seasons from the [openfootball](https://github.com/openfootball/football.json) dataset, trains models and prints probabilities for 1X2, Over 2.5, BTTS and sample parlays.

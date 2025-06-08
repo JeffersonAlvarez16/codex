@@ -79,12 +79,22 @@ def train_models(df: pd.DataFrame):
     models["BTTS"].fit(X, df["btts"])
     return models, feats
 
-def make_features(info: dict, df: pd.DataFrame, window: int, encoders, scaler, feature_cols):
-    for team in [info["home_team"], info["away_team"]]:
-        if team not in encoders["home_team"].classes_:
-            raise ValueError(
-                f"Team '{team}' not found in historical data for this competition"
+def make_features(info: dict, df: pd.DataFrame, window: int, encoders, scaler, feature_cols, competition: str):
+    missing = [t for t in [info["home_team"], info["away_team"]]
+               if t not in encoders["home_team"].classes_]
+    if missing:
+        examples = ", ".join(sorted(encoders["home_team"].classes_[:5]))
+        raise ValueError(
+            "Team{} {} not found in historical data for competition '{}'. "
+            "Check the competition code and use the English name as in the "
+            "dataset (e.g. 'Germany' instead of 'Alemania'). Available "
+            "teams include: {}...".format(
+                "s" if len(missing) > 1 else "",
+                ", ".join(missing),
+                competition,
+                examples,
             )
+        )
     temp = df[df["date"] < info["date"]].copy()
     for team_col, gf_col, ga_col in [("home_team", "home_goals", "away_goals"), ("away_team", "away_goals", "home_goals")]:
         temp[f"{team_col}_gf_avg"] = temp.groupby(team_col)[gf_col].shift().rolling(window).mean()
@@ -110,7 +120,7 @@ def predict(home: str, away: str, date: str, competition: str, window: int = 5):
     hist = load_historical_data(mdate, competition)
     prep, encoders, scaler, feat_cols = preprocess(hist, window)
     models, feats = train_models(prep)
-    match_feats = make_features({'home_team': home, 'away_team': away, 'date': mdate}, hist, window, encoders, scaler, feat_cols)
+    match_feats = make_features({'home_team': home, 'away_team': away, 'date': mdate}, hist, window, encoders, scaler, feat_cols, competition)
     probs = {k: m.predict_proba(match_feats[feats]) for k, m in models.items()}
     parlay_home_over = float(probs['1X2'][0, 0] * probs['OU25'][0, 1])
     parlay_away_over = float(probs['1X2'][0, 2] * probs['OU25'][0, 1])
