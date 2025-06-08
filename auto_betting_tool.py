@@ -4,12 +4,15 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from xgboost import XGBClassifier
 
-SEASON_URL = "https://raw.githubusercontent.com/openfootball/football.json/master/{season}/en.1.json"
+SEASON_URL = (
+    "https://raw.githubusercontent.com/openfootball/football.json/master/{season}/{competition}.json"
+)
 
 
-def download_season_data(year: int) -> pd.DataFrame:
+def download_season_data(year: int, competition: str) -> pd.DataFrame:
+    """Download a single season for the given competition code."""
     season = f"{year}-{str(year + 1)[-2:]}"
-    url = SEASON_URL.format(season=season)
+    url = SEASON_URL.format(season=season, competition=competition)
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     data = r.json()
@@ -26,11 +29,14 @@ def download_season_data(year: int) -> pd.DataFrame:
         })
     return pd.DataFrame(rows)
 
-def load_historical_data(match_date: pd.Timestamp, seasons_back: int = 2) -> pd.DataFrame:
+def load_historical_data(
+    match_date: pd.Timestamp, competition: str, seasons_back: int = 2
+) -> pd.DataFrame:
+    """Load recent seasons for the requested competition."""
     dfs = []
     year = match_date.year - (1 if match_date.month < 7 else 0)
     for i in range(seasons_back + 1):
-        dfs.append(download_season_data(year - i))
+        dfs.append(download_season_data(year - i, competition))
     df = pd.concat(dfs, ignore_index=True)
     df.sort_values("date", inplace=True)
     return df
@@ -77,7 +83,7 @@ def make_features(info: dict, df: pd.DataFrame, window: int, encoders, scaler, f
     for team in [info["home_team"], info["away_team"]]:
         if team not in encoders["home_team"].classes_:
             raise ValueError(
-                f"Team '{team}' not found in historical data. Only Premier League teams are supported."
+                f"Team '{team}' not found in historical data for this competition"
             )
     temp = df[df["date"] < info["date"]].copy()
     for team_col, gf_col, ga_col in [("home_team", "home_goals", "away_goals"), ("away_team", "away_goals", "home_goals")]:
@@ -99,9 +105,9 @@ def make_features(info: dict, df: pd.DataFrame, window: int, encoders, scaler, f
     feat_df[feature_cols] = scaler.transform(feat_df[feature_cols])
     return feat_df[feature_cols]
 
-def predict(home: str, away: str, date: str, window: int = 5):
+def predict(home: str, away: str, date: str, competition: str, window: int = 5):
     mdate = pd.to_datetime(date)
-    hist = load_historical_data(mdate)
+    hist = load_historical_data(mdate, competition)
     prep, encoders, scaler, feat_cols = preprocess(hist, window)
     models, feats = train_models(prep)
     match_feats = make_features({'home_team': home, 'away_team': away, 'date': mdate}, hist, window, encoders, scaler, feat_cols)
@@ -116,9 +122,20 @@ if __name__ == '__main__':
     parser.add_argument('home', help='Home team')
     parser.add_argument('away', help='Away team')
     parser.add_argument('date', help='Match date YYYY-MM-DD')
+    parser.add_argument(
+        '--competition',
+        default='en.1',
+        help='Openfootball competition code (e.g. en.1 for Premier League)',
+    )
     parser.add_argument('--window', type=int, default=5, help='Rolling window')
     args = parser.parse_args()
-    prob, parlays = predict(args.home, args.away, args.date, args.window)
+    prob, parlays = predict(
+        args.home,
+        args.away,
+        args.date,
+        args.competition,
+        args.window,
+    )
     print('Probabilities:')
     print('1X2:', prob['1X2'][0])
     print('Over 2.5:', prob['OU25'][0, 1])
